@@ -1,14 +1,12 @@
 name: CI
 
-# Controls when the action will run. 
-on: 
+on:
   push:
   pull_request:
   workflow_dispatch:
   release:
     types: [published]
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   build:
     name: build 🏗️
@@ -18,70 +16,92 @@ jobs:
       build_variant: ${{ matrix.build_variant }}
       targets: ${{ matrix.targets }}
       images_dir: /opt/images
+
     strategy:
       matrix:
         include:
-         # - build_variant: "mt7621"
-          #  targets: "WR1200JS K2P DIR-878 CR660x JCG-Q20 MI-4"
+          # - build_variant: "mt7621"
+          #   targets: "WR1200JS K2P DIR-878 CR660x JCG-Q20 MI-4"
           - build_variant: "mt7621-usb-1"
             targets: "ZTE-E8820S"
-          #  targets: "XY-C1 JCG-836PRO JCG-Y2 NEWIFI ZTE-E8820S B70"
-          #- build_variant: "mt7621-usb-2"
-           # targets: "MI-R3G JCG-AC860M NETGEAR-BZV MI-R3P R2100 RM2100 MSG1500 BELL-A040WQ"
+          # - build_variant: "mt7621-usb-2"
+          #   targets: "MI-R3G JCG-AC860M NETGEAR-BZV MI-R3P R2100 RM2100 MSG1500 BELL-A040WQ"
+
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
       - name: Prepare environment 🪚
         run: |
           sudo apt update
-          sudo apt install libtool-bin gperf python3-docutils autopoint gettext
+          sudo apt install -y \
+            libtool-bin gperf python3-docutils autopoint gettext \
+            fakeroot p7zip-full curl
+
       - name: Run shellcheck 🛠️
         run: sh ./trunk/tools/shellcheck.sh
+
       - name: Prepare toolchain 🔗
         run: |
           cd toolchain-mipsel
           sh dl_toolchain.sh
+
       - name: Start build 🏗️
         run: |
           cd trunk
-          mkdir -p ${images_dir}
-          for m in $targets; do fakeroot ./build_firmware_ci $m; \
-          if [ $? = 0 ]; then cp -f images/*.trx ${images_dir}/$m.trx; else exit 1; fi; \
-          ./clear_tree_simple >/dev/null 2>&1; done
+          mkdir -p "${images_dir}"
+          for m in $targets; do
+            fakeroot ./build_firmware_ci "$m"
+            if [ $? = 0 ]; then
+              cp -f images/*.trx "${images_dir}/$m.trx"
+            else
+              exit 1
+            fi
+            ./clear_tree_simple >/dev/null 2>&1
+          done
+
       - name: Create archive 💾
         if: ${{ github.event_name != 'release' && success() }}
         run: |
-          ls -lh ${images_dir}
-          GIT_VERSION=`git rev-parse --short=7 HEAD 2>/dev/null` && [ -n "$GIT_VERSION" ] && \
-          image_name=images_${build_variant}_${GIT_VERSION} || image_name=images_${build_variant}
-          cd ${images_dir}; md5sum *.trx |tee md5sum.txt; 7z a -mx=9 ${image_name}.7z ./*
-          echo "image_name=${image_name}" >> $GITHUB_ENV
+          ls -lh "${images_dir}"
+          GIT_VERSION="$(git rev-parse --short=7 HEAD 2>/dev/null)" && [ -n "$GIT_VERSION" ] && \
+          image_name="images_${build_variant}_${GIT_VERSION}" || image_name="images_${build_variant}"
+          cd "${images_dir}"
+          md5sum *.trx | tee md5sum.txt
+          7z a -mx=9 "${image_name}.7z" ./*
+          echo "image_name=${image_name}" >> "$GITHUB_ENV"
+
       - name: Upload images to Artifact 📤
         if: ${{ github.event_name != 'release' && success() }}
-        uses: actions/upload-artifact@v2.2.1
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.image_name }}
           path: ${{ env.images_dir }}/*.7z
+
       - name: Upload firmware to Transfer.sh 🌐
+        if: ${{ github.event_name != 'release' && success() }}
         run: |
-          curl -fsSL git.io/file-transfer | sh 
-          ./transfer trs --no-progress /opt/images/*.trx 2>&1 | tee log.log 
-          echo "::warning file=transfer.sh::$(cat log.log | grep https)"
-          echo "download_link=$(cat log.log | grep https)" >> $GITHUB_ENV
+          curl -fsSL git.io/file-transfer | sh
+          ./transfer trs --no-progress /opt/images/*.trx 2>&1 | tee log.log
+          echo "::warning file=transfer.sh::$(cat log.log | grep https || true)"
+          echo "download_link=$(cat log.log | grep https || true)" >> "$GITHUB_ENV"
+
       - name: Send Download link to Telegram ✉️
-        if: ${{ github.event_name != 'release' && success() }} 
+        if: ${{ github.event_name != 'release' && success() }}
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            Commit message: ${{ github.event.commits[0].message }}
-            
+            Event: ${{ github.event_name }}
+            Commit: ${{ github.sha }}
+
             Repository: https://github.com/${{ github.repository }}
             Releases: https://github.com/${{ github.repository }}/releases
-            
-            See changes: https://github.com/${{ github.repository }}/commit/${{github.sha}}
-            
+
+            See changes: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+
             ${{ env.download_link }}
+
       - name: Upload images to Releases 📤
         if: ${{ github.event_name == 'release' && success() }}
         uses: svenstaro/upload-release-action@2.2.0
