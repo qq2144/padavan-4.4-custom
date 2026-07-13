@@ -41,10 +41,20 @@
 #define DEF_WLAN_5G_SSID	BOARD_PID "_5G_%s"
 #define DEF_WLAN_2G_GSSID	BOARD_PID "_GUEST_%s"
 #define DEF_WLAN_5G_GSSID	BOARD_PID "_GUEST_5G_%s"
+
+/*
+ * ⚠️ SECURITY WARNING:
+ *    The following default passwords are ONLY for the first boot of the firmware.
+ *    You MUST change them via the Web Admin UI immediately after flashing:
+ *      - Admin password     (DEF_ROOT_PASSWORD)
+ *      - 2.4GHz WiFi PSK    (DEF_WLAN_2G_PSK)
+ *      - 5GHz WiFi PSK      (DEF_WLAN_5G_PSK)
+ *    Using default passwords in production exposes your device to unauthorized access.
+ */
 #define DEF_WLAN_2G_PSK		"1234567890"
 #define DEF_WLAN_5G_PSK		"1234567890"
-
 #define DEF_ROOT_PASSWORD	"admin"
+
 #define DEF_SMB_WORKGROUP	"WORKGROUP"
 #define DEF_TIMEZONE		"CST-8"
 #define DEF_NTP_SERVER0		"ntp1.aliyun.com"
